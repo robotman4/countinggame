@@ -6,7 +6,8 @@ import { playMusic, toggleMute, sfx } from '../audio.js';
 import { Particles } from '../particles.js';
 import { save, LEVELS } from '../storage.js';
 import { drawModelAt } from '../iso.js';
-import { truck } from '../models.js';
+import { VEHICLES } from '../models.js';
+import { levelSpec } from '../levels.js';
 import { PlayScene } from './play.js';
 import { TitleScene } from './title.js';
 
@@ -23,11 +24,13 @@ export class LevelScene {
   }
   onResize() {
     layoutTopRight([this.sound, this.home]);
-    const cols = 5, gapX = Math.min(180, (V.w - V.safeL - V.safeR - 160) / cols), gapY = 220;
+    const cols = 6, gapX = Math.min(160, (V.w - V.safeL - V.safeR - 140) / cols), gapY = 128;
     this.spots = [];
     for (let i = 0; i < LEVELS; i++) {
       const c = i % cols, r = Math.floor(i / cols);
-      this.spots.push({ x: V.w / 2 + (c - (cols - 1) / 2) * gapX, y: 300 + r * gapY, r: 62 });
+      // Small pictures of the machines this level uses, when it is not just the truck.
+      const v = levelSpec(i + 1).vehicles;
+      this.spots.push({ x: V.w / 2 + (c - (cols - 1) / 2) * gapX, y: 135 + r * gapY, r: 44, v: v.length === 1 && v[0] === 'truck' ? [] : v });
     }
   }
   enter() { playMusic('menu'); }
@@ -57,9 +60,11 @@ export class LevelScene {
     ctx.beginPath(); ctx.moveTo(0, 660);
     for (let x = 0; x <= V.w; x += 20) ctx.lineTo(x, 660 + Math.sin(x * 0.01) * 6);
     ctx.lineTo(V.w, V.h); ctx.lineTo(0, V.h); ctx.closePath(); fs(ctx, '#8fd65f', 4);
-    // a truck driving along the bottom
-    const tx = ((t * 120) % (V.w + 400)) - 200;
-    drawModelAt(ctx, (L, M) => truck(L, M, { load: ['rock', 'beam', 'sand', 'brick', 'log', 'pipe'] }), tx, 690, 1.2, 0);
+    // the machines driving along the bottom
+    const tx = ((t * 110) % (V.w + 700)) - 200;
+    drawModelAt(ctx, (L, M) => VEHICLES.truck.model(L, M, { load: ['rock', 'beam', 'sand', 'brick', 'log', 'pipe'] }), tx, 690, 1.1, 0);
+    drawModelAt(ctx, (L, M) => VEHICLES.forklift.model(L, M, { load: ['brick', 'brick', 'pipe', 'beam'] }), tx - 190, 690, 1.1, 0);
+    drawModelAt(ctx, (L, M) => VEHICLES.digger.model(L, M, { load: ['sand', 'sand', 'gravel'] }), tx - 400, 690, 1.1, 0);
     const next = Math.min(save.unlocked, LEVELS);
     for (let i = 0; i < LEVELS; i++) {
       const s = this.spots[i], locked = i + 1 > save.unlocked;
@@ -67,20 +72,26 @@ export class LevelScene {
       ctx.save();
       ctx.translate(s.x + (s.shake ? Math.sin(t * 50) * 6 : 0), s.y - hop);
       circle(ctx, 0, 8, s.r); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
-      circle(ctx, 0, 0, s.r); fs(ctx, locked ? '#b8b4c4' : COLORS[i], 6);
+      circle(ctx, 0, 0, s.r); fs(ctx, locked ? '#b8b4c4' : COLORS[i % COLORS.length], 6);
       if (locked) {
         rr(ctx, -20, -6, 40, 32, 6); fs(ctx, '#ffffff', 4);
         ctx.beginPath(); ctx.arc(0, -8, 13, Math.PI, 0); ctx.lineWidth = 12; ctx.strokeStyle = INK; ctx.stroke();
         ctx.lineWidth = 6; ctx.strokeStyle = '#ffffff'; ctx.stroke();
       } else {
-        ctx.font = '900 56px "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
+        ctx.font = '900 44px "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.lineWidth = 10; ctx.strokeStyle = INK; ctx.lineJoin = 'round';
+        ctx.lineWidth = 9; ctx.strokeStyle = INK; ctx.lineJoin = 'round';
         ctx.strokeText(String(i + 1), 0, 3); ctx.fillStyle = '#ffffff'; ctx.fillText(String(i + 1), 0, 3);
       }
       ctx.restore();
       if (!locked) {
-        for (let k = 0; k < 3; k++) drawStarIcon(ctx, s.x + (k - 1) * 40, s.y + s.r + 30, 17, k < (save.stars[i + 1] || 0));
+        for (let k = 0; k < 3; k++) drawStarIcon(ctx, s.x + (k - 1) * 28, s.y + s.r + 18, 12, k < (save.stars[i + 1] || 0));
+        // Machine badges in a column right of the button.
+        s.v.forEach((type, k) => {
+          const bx = s.x + s.r + 12, by = s.y - (s.v.length - 1) * 16 + k * 32;
+          circle(ctx, bx, by, 16); fs(ctx, '#ffffff', 3);
+          drawModelAt(ctx, (L, M) => VEHICLES[type].model(L, M, {}), bx - 2, by + 6, 0.28, 0.3, 1);
+        });
       }
     }
     if (next && save.unlocked <= LEVELS) {

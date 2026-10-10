@@ -170,50 +170,125 @@ export function truck(L, M, o = {}) {
   box(L, B, back + 0.03, 0.5, 0, 0.06, 0.28, 0.96, shade(bedc, -0.05));
   box(L, B, bc, 0.5, 0.45, len, 0.3, 0.06, bedc);
   box(L, B, bc, 0.5, -0.45, len, 0.3, 0.06, bedc);
-  const load = o.load || [];
-  load.forEach((id, i) => {
-    const [x, z] = BED_SLOTS[i];
-    MATERIALS[id].item(L, m(B, mT(x + (long ? -0.2 : 0), 0.5, z), mS(0.92)));
-  });
+  const slots = BED_SLOTS.slice(0, long ? 8 : 6).map(([x, z]) => m(B, mT(x + (long ? -0.2 : 0), 0.5, z), mS(0.92)));
+  drawLoad(L, slots, o.load);
+  return slots;
 }
-// Where slot i of the bed is in world space (for items flying in and out).
-export function bedSlotWorld(tr, i) {
-  const long = tr.cap > 6;
-  const [x, z] = BED_SLOTS[i];
-  const xx = x + (long ? -0.2 : 0);
-  const B = bedMatrix(m(mT(tr.x, tr.bounce || 0, tr.z), mRY(tr.h)), tr.tilt || 0, long);
-  return { x: B[0] * xx + B[1] * 0.6 + B[2] * z + B[3], y: B[4] * xx + B[5] * 0.6 + B[6] * z + B[7], z: B[8] * xx + B[9] * 0.6 + B[10] * z + B[11] };
+
+// Put the load items in their slots. Every vehicle model returns its slot matrices.
+function drawLoad(L, slots, load) {
+  (load || []).forEach((id, i) => { if (slots[i]) MATERIALS[id].item(L, slots[i]); });
 }
+
+// ---------------- the forklift ----------------
+// Carries solid things (bricks, beams, pipes, logs) on a pallet. tilt lifts the forks.
+export function forklift(L, M, o = {}) {
+  const color = o.color || '#f5962a';
+  for (const [x, z, s] of [[0.42, -0.36, 0.4], [0.42, 0.36, 0.4], [-0.45, -0.34, 0.32], [-0.45, 0.34, 0.32]]) {
+    box(L, M, x, 0, z, s, s, 0.18, '#2c2c36');
+    box(L, M, x, s * 0.3, z + Math.sign(z) * 0.09, s * 0.4, s * 0.4, 0.02, '#d0d0d8');
+  }
+  box(L, M, -0.05, 0.16, 0, 1.0, 0.42, 0.62, color, { b: -0.2 });
+  box(L, M, -0.6, 0.16, 0, 0.22, 0.6, 0.66, '#4a4a58');
+  box(L, M, -0.2, 0.58, 0, 0.3, 0.1, 0.4, '#3a3a46');
+  box(L, M, -0.36, 0.68, 0, 0.06, 0.32, 0.4, '#3a3a46');
+  box(L, M, 0.2, 0.58, 0, 0.1, 0.24, 0.1, '#3a3a46');
+  for (const [x, z] of [[-0.45, -0.3], [-0.45, 0.3], [0.3, -0.3], [0.3, 0.3]]) box(L, M, x, 0.58, z, 0.06, 0.72, 0.06, '#4a4a58');
+  box(L, M, -0.08, 1.3, 0, 0.86, 0.06, 0.7, '#4a4a58');
+  box(L, M, -0.08, 1.36, 0, 0.16, 0.08, 0.16, o.light ? '#ff4a3d' : '#ff9a3d');
+  // mast
+  box(L, M, 0.58, 0.08, -0.26, 0.08, 1.5, 0.08, '#6a6a78');
+  box(L, M, 0.58, 0.08, 0.26, 0.08, 1.5, 0.08, '#6a6a78');
+  box(L, M, 0.58, 1.5, 0, 0.08, 0.08, 0.6, '#6a6a78');
+  // forks and pallet go up and down
+  const C = m(M, mT(0, (o.tilt || 0) * 1.7, 0));
+  box(L, C, 0.65, 0.08, 0, 0.05, 0.5, 0.6, '#3a3a46');
+  box(L, C, 1.0, 0.06, -0.18, 0.7, 0.05, 0.09, '#3a3a46');
+  box(L, C, 1.0, 0.06, 0.18, 0.7, 0.05, 0.09, '#3a3a46');
+  box(L, C, 1.0, 0.11, 0, 0.74, 0.1, 0.78, '#c99a5e', { b: -0.2 });
+  const slots = [[0.82, -0.19], [0.82, 0.19], [1.18, -0.19], [1.18, 0.19]].map(([x, z]) => m(C, mT(x, 0.21, z), mS(0.76)));
+  drawLoad(L, slots, o.load);
+  return slots;
+}
+
+// ---------------- the excavator you drive ----------------
+// Carries loose things (sand, gravel, soil, coal, rocks) in its bucket. tilt lifts the arm and tips the bucket.
+export function digger(L, M, o = {}) {
+  const u = Math.min(1, (o.tilt || 0) / 0.6);
+  box(L, M, 0, 0, -0.45, 1.4, 0.3, 0.32, '#3a3a46');
+  box(L, M, 0, 0, 0.45, 1.4, 0.3, 0.32, '#3a3a46');
+  box(L, M, 0, 0.3, 0, 0.6, 0.1, 0.6, '#55556a');
+  const U = m(M, mT(0, 0.4, 0));
+  box(L, U, -0.15, 0, 0, 1.1, 0.4, 0.95, o.color || '#f7c531');
+  box(L, U, 0.1, 0.4, -0.22, 0.45, 0.52, 0.45, o.color || '#f7c531');
+  box(L, U, 0.335, 0.55, -0.22, 0.02, 0.28, 0.36, '#9fe0ff');
+  box(L, U, 0.1, 0.55, -0.445, 0.3, 0.28, 0.02, '#9fe0ff');
+  box(L, U, 0.1, 0.92, -0.22, 0.14, 0.07, 0.14, o.light ? '#ff4a3d' : '#ff9a3d');
+  box(L, U, -0.58, 0.4, 0.2, 0.28, 0.22, 0.5, '#4a4a58');
+  const A1 = m(U, mT(0.3, 0.35, 0.22), mRZ(0.5 + u * 0.4));
+  box(L, A1, 0.55, -0.1, 0, 1.1, 0.2, 0.2, '#f5b81a');
+  const A2 = m(A1, mT(1.05, 0, 0), mRZ(-1.55 + u * 0.35));
+  box(L, A2, 0.38, -0.08, 0, 0.76, 0.16, 0.16, '#f5b81a');
+  const A3 = m(A2, mT(0.76, 0, 0), mRZ(1.4 - u * 2.1));
+  box(L, A3, 0.28, -0.06, 0, 0.56, 0.06, 0.6, '#6a6a78', { b: -0.2 });
+  box(L, A3, 0.02, -0.06, 0, 0.05, 0.36, 0.6, '#6a6a78');
+  box(L, A3, 0.28, -0.06, 0.29, 0.56, 0.22, 0.04, '#6a6a78');
+  box(L, A3, 0.28, -0.06, -0.29, 0.56, 0.22, 0.04, '#6a6a78');
+  const slots = [[0.28, 0, -0.14], [0.28, 0, 0.14], [0.28, 0.18, 0]].map(([x, y, z]) => m(A3, mT(x, y, z), mS(0.6)));
+  drawLoad(L, slots, o.load);
+  return slots;
+}
+
+// ---------------- vehicle table ----------------
+export const LOOSE = new Set(['rock', 'gravel', 'sand', 'soil', 'coal']);
+export const VEHICLES = {
+  truck: { model: truck, r: 0.85, speed: 4.6, carries: () => true, exhaust: (cap) => [(cap > 6 ? 0.85 : 0.42) + 0.04, 1.25, -0.4] },
+  forklift: { model: forklift, r: 0.75, speed: 5.2, cap: 4, carries: (id) => !LOOSE.has(id), exhaust: () => [-0.62, 0.85, 0.28] },
+  digger: { model: digger, r: 0.95, speed: 3.8, cap: 3, carries: (id) => LOOSE.has(id), exhaust: () => [-0.55, 1.1, -0.3] },
+};
+const applyM = (M, x, y, z) => ({ x: M[0] * x + M[1] * y + M[2] * z + M[3], y: M[4] * x + M[5] * y + M[6] * z + M[7], z: M[8] * x + M[9] * y + M[10] * z + M[11] });
+export const vehicleM = (v) => m(mT(v.x, (v.bounce || 0) + (v.hop ? v.hop.y : 0), v.z), mRY(v.h));
+// Where slot i of a vehicle is in world space (for items flying in and out).
+export function slotWorld(v, i) {
+  const slots = VEHICLES[v.type].model([], vehicleM(v), { tilt: v.tilt, cap: v.cap });
+  return applyM(slots[Math.min(i, slots.length - 1)], 0, 0.12, 0);
+}
+export function localToWorld(v, p) { return applyM(vehicleM(v), p[0], p[1], p[2]); }
 
 // ---------------- the house being built ----------------
 // progress 0..1 fills blocks layer by layer; roof appears at 1.
 // colors: list of block colours (the materials delivered so far).
-export function house(L, M, progress, colors, roofK = 0, roofColor = '#e8443a') {
+// Building styles: a wide house, or a tall narrow tower.
+export const BUILDINGS = { house: { n: 4, layers: 4 }, tower: { n: 3, layers: 7 } };
+export const buildingHeight = (style) => 0.16 + BUILDINGS[style || 'house'].layers * 0.42;
+export function house(L, M, progress, colors, roofK = 0, roofColor = '#e8443a', style = 'house') {
   box(L, M, 0, 0, 0, 2.6, 0.16, 2.6, '#b8b2a8', { b: -5 });
   const ring = [];
-  const n = 4, s = 0.5;
-  for (let i = 0; i < n; i++) ring.push([-0.75 + i * s, -0.75]);
-  for (let i = 1; i < n; i++) ring.push([0.75, -0.75 + i * s]);
-  for (let i = n - 2; i >= 0; i--) ring.push([-0.75 + i * s, 0.75]);
-  for (let i = n - 2; i >= 1; i--) ring.push([-0.75, -0.75 + i * s]);
-  const layers = 4, total = ring.length * layers;
+  const { n, layers } = BUILDINGS[style], s = 0.5, h = ((n - 1) / 2) * s;
+  for (let i = 0; i < n; i++) ring.push([-h + i * s, -h]);
+  for (let i = 1; i < n; i++) ring.push([h, -h + i * s]);
+  for (let i = n - 2; i >= 0; i--) ring.push([-h + i * s, h]);
+  for (let i = n - 2; i >= 1; i--) ring.push([-h, -h + i * s]);
+  const total = ring.length * layers;
   const shown = Math.round(progress * total);
+  const doorX = -h + Math.floor(n / 2) * s;
   for (let k = 0; k < shown; k++) {
     const layer = Math.floor(k / ring.length), [x, z] = ring[k % ring.length];
-    // door gap in front, windows on the second row
-    const isDoor = z === 0.75 && Math.abs(x - 0.25) < 0.01 && layer < 2;
-    const isWin = layer === 2 && ((z === 0.75 && Math.abs(x + 0.25) < 0.01) || (x === 0.75 && Math.abs(z) < 0.3));
+    // door gap in front, windows every other row higher up
+    const isDoor = z === h && Math.abs(x - doorX) < 0.01 && layer < 2;
+    const isWin = layer >= 2 && layer % 2 === 0 && ((z === h && Math.abs(x - doorX + s) < 0.01) || (x === h && Math.abs(z) < 0.3));
     const c = isDoor ? '#8a5a3b' : isWin ? '#9fe0ff' : colors.length ? colors[k % colors.length] : '#e8d8b8';
     box(L, M, x, 0.16 + layer * 0.42, z, s, 0.42, s, c, isDoor || isWin ? undefined : { top: shade(c, 0.12) });
   }
   if (roofK > 0) {
-    const top = 0.16 + layers * 0.42;
-    const R = m(M, mT(0, top + (1 - roofK) * 2, 0));
+    const top = 0.16 + layers * 0.42, k = (n * s + 0.3) / 2.3;
+    const R = m(M, mT(0, top + (1 - roofK) * 2, 0), mS(k));
     box(L, R, 0, 0, 0, 2.3, 0.22, 2.3, roofColor);
     box(L, R, 0, 0.22, 0, 1.7, 0.22, 1.7, shade(roofColor, 0.08));
     box(L, R, 0, 0.44, 0, 1.1, 0.22, 1.1, shade(roofColor, 0.15));
     box(L, R, 0, 0.66, 0, 0.5, 0.2, 0.5, shade(roofColor, 0.22));
-    box(L, R, 0.55, 0.3, -0.5, 0.24, 0.6, 0.24, '#9a96a6');
+    if (style === 'tower') box(L, R, 0, 0.86, 0, 0.08, 0.7, 0.08, '#6a6a78'), box(L, R, 0.2, 1.3, 0, 0.36, 0.24, 0.03, '#e8443a');
+    else box(L, R, 0.55, 0.3, -0.5, 0.24, 0.6, 0.24, '#9a96a6');
   }
 }
 

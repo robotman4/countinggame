@@ -9,7 +9,7 @@ import { InfoPanel } from '../info.js';
 import { Gift } from '../celebrate.js';
 import { LevelScene } from './levels.js';
 import { drawModelAt } from '../iso.js';
-import { truck, pile, tree } from '../models.js';
+import { truck, digger, forklift, tree } from '../models.js';
 
 export const GAME_TITLE = 'COUNT & BUILD';
 
@@ -77,8 +77,8 @@ export class TitleScene {
     circle(ctx, V.safeL + 130, 330, 50); fs(ctx, '#ffe14d');
     // blocky scenery: piles, trees and the truck driving back and forth
     drawModelAt(ctx, (L, M) => tree(L, M, 1), V.w / 2 - 420, 650, 1.4);
-    drawModelAt(ctx, (L, M) => pile(L, M, 'sand'), V.w / 2 - 300, 680, 1.1);
-    drawModelAt(ctx, (L, M) => pile(L, M, 'beam'), V.w / 2 + 300, 680, 1.1);
+    drawModelAt(ctx, (L, M) => digger(L, M, { load: ['sand', 'sand', 'gravel'], tilt: (Math.sin(t * 1.2) + 1) * 0.15 }), V.w / 2 - 320, 680, 1.1, 0.2);
+    drawModelAt(ctx, (L, M) => forklift(L, M, { load: ['brick', 'brick', 'pipe', 'beam'], tilt: (Math.sin(t * 1.5 + 1) + 1) * 0.12 }), V.w / 2 + 320, 680, 1.1, Math.PI - 0.2);
     drawModelAt(ctx, (L, M) => tree(L, M, 0), V.w / 2 + 430, 650, 1.4);
     const k = (Math.sin(t * 0.6) + 1) / 2, dir = Math.cos(t * 0.6) > 0 ? 0 : Math.PI;
     drawModelAt(ctx, (L, M) => truck(L, M, { load: ['beam', 'beam', 'rock', 'sand', 'brick', 'log'] }), V.w / 2 - 160 + k * 320, 690 + Math.abs(Math.sin(t * 20)) * 1.5, 1.3, dir);

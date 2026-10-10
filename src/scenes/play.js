@@ -1,6 +1,8 @@
 // The game: a sign shows what the building site needs ("4 beams + 2 rocks").
-// Drive the truck to the right pile (tap it, or hold a finger where to go), drag or tap
-// items into the truck, then drive back to the site where the truck tips them out.
+// Drive a vehicle to the right pile (tap it, or hold a finger where to go), drag or tap
+// items into it, then drive back to the site where it tips them out. Some levels have
+// several vehicles (truck, forklift, excavator); tap one to drive it. `this.truck` is
+// always the vehicle being driven.
 import { V, R, ease, Tweens, clamp, lerp, dist, TAU } from '../core.js';
 import { INK, rr, fs, circle, drawHand, drawArrow } from '../draw.js';
 import { Button, layoutTopRight, drawStarIcon } from '../ui.js';
@@ -8,12 +10,11 @@ import { playMusic, toggleMute, sfx } from '../audio.js';
 import { Particles } from '../particles.js';
 import { recordLevel, LEVELS } from '../storage.js';
 import { CAM, setCam, proj, unproj, depthOf, drawBoxes, drawModelAt, shadow, m, mT, mRY, mS } from '../iso.js';
-import { MATERIALS, itemModel, pile, truck, bedSlotWorld, house, tree, cone, barrel, fence, excavator, crane, worker } from '../models.js';
+import { MATERIALS, itemModel, pile, VEHICLES, slotWorld, localToWorld, vehicleM, house, buildingHeight, tree, cone, barrel, fence, excavator, crane, worker } from '../models.js';
 import { levelSpec } from '../levels.js';
 import { LevelScene } from './levels.js';
 
-const MAXV = 4.6;      // truck top speed, world units per second
-const TRUCK_R = 0.85;  // truck size for bumping into things
+// Top speed and bump size are per vehicle (VEHICLES in models.js).
 const DOCK = 1.9;      // how close to a pile counts as parked there
 const HOUSE_R = 1.9;
 // Where piles may stand, as fractions of the play area. Sets by number of piles.
@@ -35,7 +36,11 @@ export class PlayScene {
     this.houseColors = [];
     this.progress = { v: 0 };
     this.roof = { k: 0 };
-    this.truck = { x: 0, z: 0, h: 0, v: 0, tx: null, tz: null, tilt: 0, load: [], hidden: 0, cap: this.spec.cap, bounce: 0, hop: { y: 0 }, shake: 0 };
+    this.vehicles = this.spec.vehicles.map((type) => ({
+      type, def: VEHICLES[type], cap: VEHICLES[type].cap || this.spec.cap,
+      x: 0, z: 0, h: 0, v: 0, tx: null, tz: null, tilt: 0, load: [], hidden: 0, bounce: 0, hop: { y: 0 }, shake: 0,
+    }));
+    this.active = 0;
     this.flyers = []; this.pops = []; this.leftovers = [];
     this.signShake = {}; this.slotPop = {};
     this.state = 'intro'; this.introT = 0;
@@ -47,6 +52,8 @@ export class PlayScene {
     this.layout(true);
     this.tw.add(this.sign, { k: 1 }, 0.5, { ease: ease.outBack });
   }
+
+  get truck() { return this.vehicles[this.active]; }
 
   // ---------------- layout ----------------
   layout(first) {
@@ -76,8 +83,10 @@ export class PlayScene {
     this.crane = { x: s.x - 1.35, z: s.z - 1.5 };
     // The excavator digs just outside the drivable area, so it never blocks the truck.
     this.digger = unproj(ss[0], top - 85);
-    this.leftPos = near(-150, 95);
-    this.workerPos = near(140, 100);
+    this.leftPos = near(-250, 25);
+    this.workerPos = near(250, 25);
+    // Where the vehicles wait at the start: the first one in front of the house, the others beside it.
+    this.parking = [this.site.dock, near(-205, 125), near(215, 130)];
     this.obstacles = [
       ...this.piles.map((p) => ({ x: p.x, z: p.z, r: p.r })),
       { x: s.x, z: s.z, r: HOUSE_R },
@@ -87,12 +96,12 @@ export class PlayScene {
       for (let k = 0; k < 8; k++) {
         for (const o of this.obstacles) {
           if (o.x === pl.x && o.z === pl.z) continue;
-          const dx = pl.dock.x - o.x, dz = pl.dock.z - o.z, d = Math.hypot(dx, dz) || 1e-3, min = o.r + TRUCK_R + 0.15;
+          const dx = pl.dock.x - o.x, dz = pl.dock.z - o.z, d = Math.hypot(dx, dz) || 1e-3, min = o.r + 0.95 + 0.15;
           if (d < min) { pl.dock.x = o.x + (dx / d) * min; pl.dock.z = o.z + (dz / d) * min; }
         }
       }
     }
-    if (first) { this.truck.x = this.site.dock.x; this.truck.z = this.site.dock.z; this.truck.h = 0; }
+    if (first) this.vehicles.forEach((v, i) => { v.x = this.parking[i].x; v.z = this.parking[i].z; v.h = i === 2 ? Math.PI : 0; });
     this.clampTruck();
     layoutTopRight([this.sound, this.home]);
     const eb = this.endBtns;
@@ -122,7 +131,7 @@ export class PlayScene {
     }
     const s = this.site;
     const ss = proj(s.x, 0, s.z);
-    this.cones = [[-110, 150], [120, 160], [-200, -60], [210, -50]].map(([dx, dy]) => unproj(ss[0] + dx, ss[1] + dy));
+    this.cones = [[-90, 165], [100, 175], [-200, -60], [210, -50]].map(([dx, dy]) => unproj(ss[0] + dx, ss[1] + dy));
     this.barrels = [[-170, -110], [175, -105]].map(([dx, dy]) => unproj(ss[0] + dx, ss[1] + dy));
   }
 
@@ -174,10 +183,15 @@ export class PlayScene {
   loaded(mat) { return this.truck.load.filter((x) => x === mat).length; }
   remaining(mat) { return (this.need[mat] || 0) - (this.delivered[mat] || 0) - this.loaded(mat) - (this.coming[mat] || 0); }
   stillNeeded() { return this.spec.order.some((o) => this.delivered[o.m] < o.n); }
-  truckM() { const tr = this.truck; return m(mT(tr.x, tr.bounce + tr.hop.y, tr.z), mRY(tr.h)); }
-  bedScreen() { const tr = this.truck; const c = tr.cap > 6 ? -0.2 : -0.3; return proj(tr.x + Math.cos(tr.h) * c, 0.9, tr.z + Math.sin(tr.h) * c); }
-  slotScreen(i) { const w = bedSlotWorld(this.truck, i); return proj(w.x, w.y, w.z); }
-  houseTop() { const s = this.site; return proj(s.x, 0.4 + this.progress.v * 1.7, s.z); }
+  // Middle of where the load goes (truck bed, pallet, bucket): the drop target for dragged items.
+  bedScreen(v = this.truck) {
+    const a = slotWorld(v, 0), b = slotWorld(v, v.cap - 1);
+    return proj((a.x + b.x) / 2, (a.y + b.y) / 2 + 0.25, (a.z + b.z) / 2);
+  }
+  slotScreen(i) { const w = slotWorld(this.truck, i); return proj(w.x, w.y, w.z); }
+  houseTop() { const s = this.site; return proj(s.x, 0.4 + this.progress.v * (buildingHeight(this.spec.building) - 0.3), s.z); }
+  // First vehicle in this level that can carry a material.
+  carrierFor(mat) { return this.vehicles.find((v) => v.def.carries(mat)); }
 
   // Items floating over a pile, ready to grab. Bigger when the truck is parked there.
   itemScreen(p, i) {
@@ -189,10 +203,12 @@ export class PlayScene {
   }
 
   clampTruck() {
-    const tr = this.truck, { left, right, top, bot } = this.rect;
-    const [sx, sy] = proj(tr.x, 0, tr.z);
-    const cx = clamp(sx, left - 60, right + 60), cy = clamp(sy, top - 40, bot + 40);
-    if (cx !== sx || cy !== sy) { const w = unproj(cx, cy); tr.x = w.x; tr.z = w.z; }
+    const { left, right, top, bot } = this.rect;
+    for (const tr of this.vehicles) {
+      const [sx, sy] = proj(tr.x, 0, tr.z);
+      const cx = clamp(sx, left - 60, right + 60), cy = clamp(sy, top - 40, bot + 40);
+      if (cx !== sx || cy !== sy) { const w = unproj(cx, cy); tr.x = w.x; tr.z = w.z; }
+    }
   }
   setTarget(x, z) {
     const tr = this.truck;
@@ -238,12 +254,18 @@ export class PlayScene {
         }
       }
     }
+    // Tap another vehicle: drive that one now.
+    for (let i = 0; i < this.vehicles.length; i++) {
+      if (i === this.active) continue;
+      const v = this.vehicles[i], q = proj(v.x, 0.6, v.z);
+      if (dist(p.x, p.y, q[0], q[1]) < 75) { this.switchTo(i); return; }
+    }
     // Tap the truck: give one item back to this pile if it carries any, otherwise honk.
     const bs = this.bedScreen();
     if (dist(p.x, p.y, bs[0], bs[1]) < 70) {
       if (this.dock && this.loaded(this.dock.m) > 0 && tr.hidden === 0) { this.giveBack(this.dock); return; }
       sfx('honk');
-      this.tw.add(tr.hop, { y: 0.35 }, 0.12, { onDone: () => this.tw.add(tr.hop, { y: 0 }, 0.3, { ease: ease.outBounce }) });
+      this.hopV(tr);
       return;
     }
     // Tap a pile or its items: drive there.
@@ -262,6 +284,17 @@ export class PlayScene {
     this.tapFx(p);
   }
   tapFx(p) { this.marker = { x: p.x, y: p.y, t: 0 }; }
+
+  switchTo(i) {
+    this.truck.tx = null;
+    this.active = i;
+    const v = this.truck, q = proj(v.x, 1, v.z);
+    sfx('honk');
+    this.hopV(v);
+    this.fx.burst(q[0], q[1], 8);
+    this.idle = 0;
+  }
+  hopV(v) { this.tw.add(v.hop, { y: 0.35 }, 0.12, { onDone: () => this.tw.add(v.hop, { y: 0 }, 0.3, { ease: ease.outBounce }) }); }
 
   onMove(p) {
     if (this.drag) {
@@ -295,6 +328,14 @@ export class PlayScene {
 
   tryLoad(d) {
     const tr = this.truck;
+    if (!tr.def.carries(d.m)) {
+      // Wrong machine for this (sand on a forklift): it hops back, and the right machine waves.
+      sfx('bump'); tr.shake = 0.4;
+      const c = this.carrierFor(d.m);
+      if (c) { this.hopV(c); this.callout = { v: c, t: 0 }; }
+      this.sendBack(d);
+      return;
+    }
     if (tr.load.length >= tr.cap) {
       sfx('bump'); tr.shake = 0.4;
       this.sendBack(d);
@@ -406,7 +447,8 @@ export class PlayScene {
     this.state = 'done';
     this.doneT = 0;
     // Stars: never 0. Lose one for extras, one for being slow (par grows with the order size).
-    const trips = Math.ceil(this.total / this.spec.cap);
+    const cap = this.vehicles.reduce((a, v) => a + v.cap, 0) / this.vehicles.length;
+    const trips = Math.ceil(this.total / cap) + this.vehicles.length - 1;
     const par = 20 + this.total * 3 + trips * 14;
     let s = 3;
     if (this.mistakes > 0) s--;
@@ -452,6 +494,7 @@ export class PlayScene {
     this.pops = this.pops.filter((pp) => pp.t < 1.1);
     for (const k in this.signShake) this.signShake[k] = Math.max(0, this.signShake[k] - dt);
     if (this.marker) { this.marker.t += dt; if (this.marker.t > 0.5) this.marker = null; }
+    if (this.callout) { this.callout.t += dt; if (this.callout.t > 2.5) this.callout = null; }
   }
 
   updateTruck(dt) {
@@ -462,7 +505,7 @@ export class PlayScene {
       else {
         const diff = angDiff(this.steer(dx / d, dz / d, d), tr.h);
         tr.h += clamp(diff, -4.2 * dt, 4.2 * dt);
-        const want = MAXV * Math.min(1, d / 1.2) * Math.max(d < 1.2 ? 0.05 : 0.3, Math.cos(diff));
+        const want = tr.def.speed * Math.min(1, d / 1.2) * Math.max(d < 1.2 ? 0.05 : 0.3, Math.cos(diff));
         tr.v += (want - tr.v) * Math.min(1, dt * 5);
         // Pushing against something and getting nowhere: give up and wait for the next tap.
         this.stuckT = (this.stuckT || 0) + dt;
@@ -477,9 +520,11 @@ export class PlayScene {
     tr.z += Math.sin(tr.h) * tr.v * dt;
     // Bump around piles, the house and the machines.
     for (const o of this.obstacles) {
-      const dx = tr.x - o.x, dz = tr.z - o.z, d = Math.hypot(dx, dz), min = o.r + TRUCK_R;
+      const dx = tr.x - o.x, dz = tr.z - o.z, d = Math.hypot(dx, dz), min = o.r + tr.def.r;
       if (d < min && d > 1e-4) { tr.x = o.x + (dx / d) * min; tr.z = o.z + (dz / d) * min; }
     }
+    // Parked vehicles just stand still.
+    for (const v of this.vehicles) if (v !== tr) { v.v = 0; v.bounce *= Math.exp(-dt * 10); v.shake = Math.max(0, v.shake - dt); }
     this.clampTruck();
     // A little bounce while driving, and smoke from the pipe.
     const moving = Math.abs(tr.v) > 0.4;
@@ -488,9 +533,8 @@ export class PlayScene {
     this.smokeT = (this.smokeT || 0) - dt;
     if (this.smokeT <= 0) {
       this.smokeT = moving ? 0.08 : 0.45;
-      const M = this.truckM(), lx = (tr.cap > 6 ? 0.85 : 0.42) + 0.04;
-      const ex = [M[0] * lx + M[1] * 1.25 + M[2] * -0.4 + M[3], M[4] * lx + M[5] * 1.25 + M[6] * -0.4 + M[7], M[8] * lx + M[9] * 1.25 + M[10] * -0.4 + M[11]];
-      const q = proj(ex[0], ex[1], ex[2]);
+      const ex = localToWorld(tr, tr.def.exhaust(tr.cap));
+      const q = proj(ex.x, ex.y, ex.z);
       this.fx.smoke(q[0], q[1], { r: moving ? 7 : 5, grow: 16, vx: R.range(-20, 20), vy: R.range(-50, -30), life: 0.7, drag: 1 });
     }
     // Which pile are we parked at?
@@ -505,7 +549,7 @@ export class PlayScene {
       this.dock = best;
     }
     // At the site with something in the bed: tip it out.
-    if (this.state === 'play' && tr.load.length && tr.hidden === 0 && dist(tr.x, tr.z, this.site.x, this.site.z) < HOUSE_R + TRUCK_R + 0.9) this.startDump();
+    if (this.state === 'play' && tr.load.length && tr.hidden === 0 && dist(tr.x, tr.z, this.site.x, this.site.z) < HOUSE_R + tr.def.r + 0.9) this.startDump();
   }
 
   // Direction to drive: straight at the target, or around the nearest thing in the way.
@@ -516,14 +560,14 @@ export class PlayScene {
       const ox = o.x - tr.x, oz = o.z - tr.z;
       const along = ox * ux + oz * uz;
       if (along <= 0 || along > d) continue;
-      const side = ox * -uz + oz * ux, clear = o.r + TRUCK_R + 0.15;
+      const side = ox * -uz + oz * ux, clear = o.r + tr.def.r + 0.15;
       if (Math.abs(side) < clear && along < bestAlong) { best = { o, side, clear }; bestAlong = along; }
     }
     if (!best) return Math.atan2(uz, ux);
     // Aim past the obstacle, on the side we are already on unless that side is blocked too.
     const { o, side, clear } = best, r = clear + 0.35;
     const pass = (sgn) => ({ x: o.x - uz * sgn * r, z: o.z + ux * sgn * r });
-    const blocked = (q) => this.obstacles.some((b) => b !== o && dist(q.x, q.z, b.x, b.z) < b.r + TRUCK_R);
+    const blocked = (q) => this.obstacles.some((b) => b !== o && dist(q.x, q.z, b.x, b.z) < b.r + tr.def.r);
     let q = pass(side >= 0 ? -1 : 1);
     if (blocked(q)) { const q2 = pass(side >= 0 ? 1 : -1); if (!blocked(q2)) q = q2; }
     return Math.atan2(q.z - tr.z, q.x - tr.x);
@@ -555,14 +599,20 @@ export class PlayScene {
     }
     // Shadows
     for (const pl of this.piles) shadow(ctx, pl.x, pl.z, 1.2, 0.16);
-    shadow(ctx, tr.x, tr.z, 1.15, 0.22);
+    for (const v of this.vehicles) shadow(ctx, v.x, v.z, v.def.r + 0.3, 0.22);
+    // With more than one vehicle, a ring shows which one you are driving.
+    if (this.vehicles.length > 1) {
+      const q = proj(tr.x, 0, tr.z), R = (tr.def.r + 0.55) * CAM.S;
+      ctx.beginPath(); ctx.ellipse(q[0], q[1], R, R * Math.sin(CAM.pitch), 0, 0, TAU);
+      ctx.lineWidth = 6; ctx.strokeStyle = `rgba(255,240,120,${0.75 + Math.sin(t * 5) * 0.25})`; ctx.stroke();
+    }
     for (const tt of this.trees) shadow(ctx, tt.x, tt.z, 0.5, 0.18);
 
     // 3D objects, back to front
     const groups = [];
     const add = (x, z, fn, bias = 0) => groups.push({ d: depthOf(x, 0, z) + bias, fn });
     const s = this.site;
-    add(s.x, s.z, (L) => house(L, mT(s.x, 0, s.z), this.progress.v, this.houseColors, this.roof.k, this.spec.roof));
+    add(s.x, s.z, (L) => house(L, mT(s.x, 0, s.z), this.progress.v, this.houseColors, this.roof.k, this.spec.roof, this.spec.building));
     add(this.crane.x, this.crane.z, (L) => crane(L, mT(this.crane.x, 0, this.crane.z), t));
     add(this.digger.x, this.digger.z, (L) => excavator(L, m(mT(this.digger.x, 0, this.digger.z), mRY(2.6)), t));
     add(this.workerPos.x, this.workerPos.z, (L) => worker(L, m(mT(this.workerPos.x, 0, this.workerPos.z), mRY(-2.2), mS(1.5)), this.state === 'dump' || this.state === 'done' ? t * 10 : 0));
@@ -578,11 +628,13 @@ export class PlayScene {
         MATERIALS[id].item(L, m(mT(lp.x + Math.cos(a) * r, Math.floor(i / 6) * 0.25, lp.z + Math.sin(a) * r), mRY(i)));
       }));
     }
-    add(tr.x, tr.z, (L) => {
-      const shown = tr.load.slice(0, tr.load.length - tr.hidden);
-      const sh = tr.shake > 0 ? Math.sin(t * 60) * 0.05 : 0;
-      truck(L, m(this.truckM(), mT(0, 0, sh)), { tilt: tr.tilt, load: shown, cap: tr.cap, light: Math.sin(t * 8) > 0 && Math.abs(tr.v) > 0.4 });
-    }, 0.3);
+    for (const v of this.vehicles) {
+      add(v.x, v.z, (L) => {
+        const shown = v.load.slice(0, v.load.length - v.hidden);
+        const sh = v.shake > 0 ? Math.sin(t * 60) * 0.05 : 0;
+        v.def.model(L, m(vehicleM(v), mT(0, 0, sh)), { tilt: v.tilt, load: shown, cap: v.cap, light: Math.sin(t * 8) > 0 && Math.abs(v.v) > 0.4 });
+      }, 0.3);
+    }
     groups.sort((a, b) => a.d - b.d);
     for (const g of groups) { const L = []; g.fn(L); drawBoxes(ctx, L); }
 
@@ -593,12 +645,30 @@ export class PlayScene {
         const it = pl.items[i];
         if (!it.ready || it.s <= 0.01) continue;
         const q = this.itemScreen(pl, i);
-        if (big) {
+        const wrong = big && !tr.def.carries(pl.m);
+        if (big && !wrong) {
           ctx.beginPath(); ctx.arc(q.x, q.y + 4, 34, 0, TAU); ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
           ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,240,120,0.9)'; ctx.stroke();
         }
+        if (wrong) ctx.globalAlpha = 0.5;
         drawModelAt(ctx, itemModel(pl.m), q.x, q.y + 12, q.s * it.s, Math.sin(t * 1.5 + i) * 0.4);
+        ctx.globalAlpha = 1;
       }
+      // Parked with the wrong machine: show the machine that can carry this, in a bubble.
+      const c = big && !tr.def.carries(pl.m) && this.carrierFor(pl.m);
+      if (c) {
+        const q = this.itemScreen(pl, 1);
+        const bx = clamp(q.x, V.safeL + 60, V.w - V.safeR - 60), by = Math.max(V.safeT + 150, q.y - 85) + Math.sin(t * 4) * 5;
+        ctx.beginPath(); ctx.moveTo(bx - 12, by + 40); ctx.lineTo(q.x, q.y - 30); ctx.lineTo(bx + 12, by + 40); ctx.closePath(); fs(ctx, '#ffffff', 4);
+        circle(ctx, bx, by, 46); fs(ctx, '#ffffff', 4);
+        drawModelAt(ctx, (L, M) => c.def.model(L, M, { cap: c.cap }), bx - 4, by + 16, 0.5, 0.3, 1.5);
+      }
+    }
+    // The right machine waves after a wrong try: a pulsing ring around it.
+    if (this.callout) {
+      const v = this.callout.v, q = proj(v.x, 0, v.z), R = (v.def.r + 0.7) * CAM.S * (1 + Math.sin(t * 10) * 0.08);
+      ctx.beginPath(); ctx.ellipse(q[0], q[1], R, R * Math.sin(CAM.pitch), 0, 0, TAU);
+      ctx.lineWidth = 7; ctx.strokeStyle = `rgba(255,255,255,${1 - this.callout.t / 2.5})`; ctx.stroke();
     }
     // Flying and dragged items
     for (const f of this.flyers) drawModelAt(ctx, itemModel(f.m), f.x, f.y + 10, f.s);
@@ -638,10 +708,11 @@ export class PlayScene {
     // Split into two rows if it does not fit, then shrink if it still does not.
     let rows = [order];
     const fullW = order.reduce((a, o) => a + groupW(o), 0) + GAP * (order.length - 1) + 50;
-    if (fullW * 0.8 > maxW && order.length > 1) { const h = Math.ceil(order.length / 2); rows = [order.slice(0, h), order.slice(h)]; }
+    if ((fullW * 0.8 > maxW || (V.ui > 1 && order.length > 2)) && order.length > 1) { const h = Math.ceil(order.length / 2); rows = [order.slice(0, h), order.slice(h)]; }
     const rowW = rows.map((r) => r.reduce((a, o) => a + groupW(o), 0) + GAP * (r.length - 1));
     const W = Math.max(...rowW) + 50, H = rows.length * 70 + 30;
-    const fit = Math.min(1, maxW / W);
+    // Phones show everything smaller, so the sign may grow a bit there.
+    const fit = Math.min(V.ui > 1 ? 1.25 : 1, maxW / W);
     const k = lerp(Math.min(1.45, (V.w - 80) / W), fit, intro ? 0 : ease.outQuad(mv)) * this.sign.k;
     const cx = V.w / 2, cy = lerp(V.h * 0.42, V.safeT + 14 + (H * k) / 2, intro ? 0 : ease.outQuad(mv));
     ctx.save();
@@ -706,9 +777,17 @@ export class PlayScene {
   // Show the next step after a few seconds of doing nothing.
   drawHint(ctx) {
     const t = this.t, tr = this.truck;
-    const need = (mat) => this.remaining(mat) > 0;
+    // Only what this machine can carry counts here.
+    const need = (mat) => this.remaining(mat) > 0 && tr.def.carries(mat);
     const anyNeed = this.spec.order.some((o) => need(o.m));
     const press = Math.sin(t * 8) > 0 ? 1 : 0;
+    // Nothing this machine can still fetch and nothing loaded: point at a machine that can.
+    if (!anyNeed && !tr.load.length) {
+      const o = this.spec.order.find((x) => this.remaining(x.m) > 0);
+      const c = o && this.carrierFor(o.m);
+      if (c && c !== tr) { const q = proj(c.x, 0.8, c.z); drawHand(ctx, q[0] + 10, q[1], 1, press); }
+      return;
+    }
     if (this.dock && need(this.dock.m) && tr.load.length < tr.cap) {
       // drag from the pile to the truck
       const i = this.dock.items.findIndex((it) => it.ready);

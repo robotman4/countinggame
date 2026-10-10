@@ -1,7 +1,7 @@
 // Progress saved on the device in localStorage. One player, no profiles.
 // Change KEY per game so two games on the same domain never share a save.
 const KEY = 'countbuild.v1';
-export const LEVELS = 10;
+export const LEVELS = 24;
 
 const defaults = () => ({ stars: Array(LEVELS + 1).fill(0), unlocked: 1, muted: false, bestTimes: Array(LEVELS + 1).fill(0) });
 
