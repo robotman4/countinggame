@@ -47,6 +47,8 @@ export class TitleScene {
     this.fx.burst(p.x, p.y, 8);
     sfx('tap');
   }
+  onMove(p) { this.info.onMove(p); }
+  onUp(p) { this.info.onUp(p); }
   update(dt) { this.t += dt; this.fx.update(dt); this.info.update(dt); if (this.gift) this.gift.update(dt); }
   draw(ctx) {
     const t = this.t;

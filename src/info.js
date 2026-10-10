@@ -1,5 +1,6 @@
 // Info panel for parents: what the game is, what it does with data, the disclaimer,
 // the version and a "check for updates" button. Opened with the (i) button.
+// The text scrolls with a finger drag when it does not fit (iPhone).
 import { V } from './core.js';
 import { INK, rr, fs } from './draw.js';
 import { Button, tapUpdate } from './ui.js';
@@ -23,8 +24,9 @@ export class InfoPanel {
     this.close = new Button('close', '#e8443a', 34);
     this.status = null; // null | 'checking' | 'latest' | 'available' | 'error'
     this.updBtn = null;
+    this.scroll = 0; this.vel = 0; this.contentH = 0; this.drag = null;
   }
-  show() { this.open = true; this.status = null; sfx('pop'); }
+  show() { this.open = true; this.status = null; this.scroll = 0; this.vel = 0; sfx('pop'); }
   hide() { this.open = false; sfx('tap'); }
 
   layout() {
@@ -35,7 +37,10 @@ export class InfoPanel {
     this.box = { x, y, w, h };
     this.close.x = x + w - 26; this.close.y = y + 26;
     this.checkBtn = { x: x + 40, y: y + h - 92, w: 330 * Math.min(this.f, 1.3), h: 62 * Math.min(this.f, 1.2) };
+    // The scrolling text area: below the top edge, above the version line.
+    this.area = { x, y: y + 22, w, h: h - 22 - 150 };
   }
+  maxScroll() { return Math.max(0, this.contentH - this.area.h); }
 
   // Returns true when the panel handled the tap (always while it is open).
   onDown(p, fx) {
@@ -44,6 +49,13 @@ export class InfoPanel {
     const b = this.box, c = this.checkBtn;
     if (this.close.hit(p)) { this.hide(); return true; }
     if (this.updBtn && this.status === 'available' && this.updBtn.hit(p)) { tapUpdate(this.updBtn, fx); return true; }
+    // Finger down on the text: start scrolling.
+    const a = this.area;
+    if (p.x > a.x && p.x < a.x + a.w && p.y > a.y && p.y < a.y + a.h) {
+      this.drag = { y: p.y, s: this.scroll, last: p.y, t: performance.now() };
+      this.vel = 0;
+      return true;
+    }
     if (p.x > c.x && p.x < c.x + c.w && p.y > c.y && p.y < c.y + c.h && this.status !== 'checking') {
       sfx('tap');
       this.status = 'checking';
@@ -55,7 +67,31 @@ export class InfoPanel {
     return true;
   }
 
-  update(dt) { this.k += ((this.open ? 1 : 0) - this.k) * Math.min(1, dt * 12); }
+  onMove(p) {
+    if (!this.open || !this.drag) return false;
+    const d = this.drag, now = performance.now();
+    this.scroll = Math.max(0, Math.min(this.maxScroll(), d.s + (d.y - p.y)));
+    // Remember the speed so a flick keeps gliding.
+    const dt = Math.max(1, now - d.t) / 1000;
+    this.vel = (d.last - p.y) / dt;
+    d.last = p.y; d.t = now;
+    return true;
+  }
+  onUp() {
+    if (!this.drag) return false;
+    if (performance.now() - this.drag.t > 100) this.vel = 0;
+    this.drag = null;
+    return true;
+  }
+
+  update(dt) {
+    this.k += ((this.open ? 1 : 0) - this.k) * Math.min(1, dt * 12);
+    if (!this.drag && Math.abs(this.vel) > 5) {
+      this.scroll = Math.max(0, Math.min(this.maxScroll(), this.scroll + this.vel * dt));
+      this.vel *= Math.exp(-dt * 4);
+      if (this.scroll <= 0 || this.scroll >= this.maxScroll()) this.vel = 0;
+    }
+  }
 
   draw(ctx, t) {
     if (this.k < 0.01) return;
@@ -67,14 +103,34 @@ export class InfoPanel {
     ctx.translate(V.w / 2, V.h / 2); ctx.scale(0.9 + this.k * 0.1, 0.9 + this.k * 0.1); ctx.translate(-V.w / 2, -V.h / 2);
     rr(ctx, x, y, w, h, 28); fs(ctx, '#fff8e8', 6);
     ctx.textBaseline = 'top'; ctx.textAlign = 'left';
-    const f = this.f;
-    let ty = y + 30;
+    const f = this.f, a = this.area;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(a.x + 6, a.y, a.w - 12, a.h); ctx.clip();
+    let ty = a.y + 8 - this.scroll;
     for (const [title, body] of SECTIONS) {
       ctx.fillStyle = INK; ctx.font = `800 ${26 * f}px "Arial Rounded MT Bold", Arial, sans-serif`;
       ctx.fillText(title, x + 40, ty); ty += 34 * f;
       ctx.font = `${19 * f}px Arial, sans-serif`; ctx.fillStyle = '#3a3050';
       for (const line of wrap(ctx, body, w - 110)) { ctx.fillText(line, x + 40, ty); ty += 24 * f; }
       ty += 12 * f;
+    }
+    this.contentH = ty + this.scroll - a.y;
+    ctx.restore();
+    const max = this.maxScroll();
+    if (max > 0) {
+      // Fade at the edges where more text is hidden, and a scroll bar on the right.
+      const fade = (y0, up) => {
+        const g = ctx.createLinearGradient(0, y0, 0, y0 + (up ? 40 : -40));
+        g.addColorStop(0, 'rgba(255,248,232,1)'); g.addColorStop(1, 'rgba(255,248,232,0)');
+        ctx.fillStyle = g; ctx.fillRect(a.x + 6, up ? y0 : y0 - 40, a.w - 12, 40);
+      };
+      if (this.scroll > 1) fade(a.y, true);
+      if (this.scroll < max - 1) fade(a.y + a.h, false);
+      // The track starts below the close button.
+      const top = a.y + 40, trackH = a.h - 40;
+      const barH = Math.max(40, (trackH * a.h) / this.contentH), barY = top + (trackH - barH) * (this.scroll / max);
+      rr(ctx, x + w - 26, top, 10, trackH, 5); ctx.fillStyle = 'rgba(42,31,61,0.12)'; ctx.fill();
+      rr(ctx, x + w - 26, barY, 10, barH, 5); ctx.fillStyle = '#9b5de5'; ctx.fill();
     }
     ctx.font = `${16 * f}px Arial, sans-serif`; ctx.fillStyle = '#7a7090';
     ctx.fillText(`Version ${VERSION}`, x + 40, y + h - 128);
