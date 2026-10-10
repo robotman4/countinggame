@@ -12,8 +12,8 @@ const VERSION = `${new Date().toISOString().slice(0, 10)} (${sha})`;
 const base = process.env.BASE_PATH || '/';
 
 // Change these per game.
-const NAME = 'My Game';
-const DESCRIPTION = 'A game for kids.';
+const NAME = 'Count & Build';
+const DESCRIPTION = 'Drive the truck, count the materials and build the house. For kids aged 4–8.';
 const THEME = '#1a1446';
 
 export default defineConfig({

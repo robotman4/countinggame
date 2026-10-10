@@ -1,6 +1,18 @@
-# Kids game template: notes for Claude
+# Count & Build: notes for Claude
 
-This repo is the starting point for small PWA games for kids aged 4–8. Each game lives in its own repo created from this template. Read this whole file before changing anything. It holds lessons learned the hard way on the first game (Rocket Hunt, `robotman4/rocketgame`).
+This is **Count & Build**, a PWA game for kids aged 4–8, created from the kids game template. Read this whole file before changing anything. Most of it holds lessons learned the hard way on the first game (Rocket Hunt, `robotman4/rocketgame`); the "Count & Build" section below is specific to this game.
+
+## Count & Build
+
+- **The game:** a sign shows the order with pictures and a number ("4 beams + 2 rocks"). The player drives a dump truck to the right piles, drags or taps items into the truck, and drives back to the house. At the site the truck tips the load; each piece flies onto the house, which grows block by block and gets a roof when the order is complete.
+- **Driving:** tap a pile or the house to drive there; tap or hold anywhere else and the truck drives toward the finger. Parked next to a pile (`DOCK`), its items float bigger and can be grabbed. Tapping the truck at a pile gives one item of that kind back.
+- **Counting help:** every piece loaded or delivered pops a big number with a rising note (`sfx('count', n)`). The sign marks pieces yellow when loaded (`ticks`, levels 1–6) and green when delivered.
+- **Never punishing:** in levels 1–4 (`guard`) the truck refuses items that aren't needed. Later, extras land on a leftover heap and cost one star; nothing else happens.
+- **Tuning:** everything per level is in `levelSpec()` in `src/levels.js` (`COUNTS` table, number of piles, truck size `cap`, `guard`, `ticks`). Stars are in `finish()` in `play.js`.
+- **3D look:** `src/iso.js` is a tiny renderer for boxes on the 2D canvas with a fixed orthographic camera (Crossy Road style), and `src/models.js` holds every model (materials, piles, truck, house, crane, excavator, trees). No WebGL and no library. Models are lists of boxes built with 3x4 matrices, so parts can tilt and turn (truck bed, excavator arm, crane jib). `drawModelAt()` draws a model at a screen point for icons and flying items.
+- **Depth sorting** is per box (centre depth plus an optional bias `b`), and per model group in the scene. Long flat boxes (bed floor, chassis, slab) need a negative bias, or items on top of them disappear.
+- **Layout** is in screen fractions (`SLOTS`) converted to world positions with `unproj()`, so the same level fits both iPad and iPhone. The truck is clamped to the play area in screen space.
+- **Lesson:** obstacles must never leave a gap narrower than the truck, and a parking spot must never sit inside an obstacle. Both happened in the first build (the truck pushed against the excavator forever). `layout()` now pushes parking spots clear, decorations that could pinch sit outside the drivable area or inside the house's bump circle, `steer()` drives around the nearest obstacle on a free side, and a truck that makes no progress for 0.8 s stops.
 
 ## The owner and how to work with them
 
@@ -61,7 +73,7 @@ This repo is the starting point for small PWA games for kids aged 4–8. Each ga
 ## How to test
 
 - Run `npm run build && npx vite preview --port 4173`, then drive the game with Playwright. It's installed globally (`require('/opt/node22/lib/node_modules/playwright')`); Chromium lives in `/opt/pw-browsers`. Do not run `playwright install`.
-- Test at 1024×768 (iPad) and 844×390 (iPhone). To simulate the notch, inject the style `#safe{padding:0 47px 21px 47px !important}`.
+- Test at 1024×768 (iPad) and 844×390 (iPhone). The play scene exposes `setTarget()`, `dock`, `itemScreen()`, `remaining()` and `site.dock`, which is enough for a bot that plays any level. To simulate the notch, inject the style `#safe{padding:0 47px 21px 47px !important}`.
 - Drive scenes through `window.__game.scene` (call `onDown` with logical coordinates, or use real `page.mouse.click`). Take screenshots and look at them. Write automated play-throughs ("bots") that finish whole levels, and check for page errors.
 - Class names are minified in the build, so don't rely on `constructor.name`.
 - Background `vite preview` servers die between shell calls. Start one in the same command as the test, or check that it's up first.

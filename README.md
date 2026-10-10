@@ -1,21 +1,15 @@
-# Kids game template
+# Count & Build
 
-A starting point for small offline web games (PWAs) for kids aged 4–8, built for iPad (landscape) and iPhone.
+A building site game for kids aged 4–8, for iPad (landscape) and iPhone. Works offline once installed.
 
-It includes:
-- A canvas engine with iPad and iPhone scaling, touch input, scenes, tweens and particles.
-- Synthesized chiptune music and sound effects, with the iOS audio fixes already in place.
-- Offline support, an in-game "update available" button with a celebration after updating, an ⓘ info panel for parents (data statement, disclaimer, version, check for updates), and automatic deploys to GitHub Pages.
-- A small example game (pop the balloons) that shows the patterns to follow.
-- `CLAUDE.md`, which holds the design rules and lessons for Claude to read when building a new game.
+The sign shows what the house needs, with pictures and a number: 4 beams + 2 rocks. Drive the dump truck to the right piles (tap a pile, or hold a finger where to go), drag or tap the pieces into the truck, and drive back. The truck tips its load and the house grows block by block. Every piece counts out loud with a big number and a rising note.
 
-## Create a new game
+- 10 levels, from "2 bricks" up to four kinds of material and more than one trip.
+- 1–3 stars, never 0. Extra pieces land on a leftover heap and cost a star; nothing is ever lost.
+- Blocky 3D look drawn on a plain 2D canvas (`src/iso.js`, `src/models.js`), no images and no 3D library.
+- Chiptune music and sounds, all synthesized.
 
-1. On GitHub, click **Use this template** → **Create a new repository**.
-2. In the new repo, go to **Settings → Pages → Source** and choose **GitHub Actions**.
-3. Start a Claude Code session on the new repo and describe the game. Claude reads `CLAUDE.md` first.
-
-The game will be at `https://<user>.github.io/<repo-name>/`. To install it on iPad or iPhone, open the link in Safari and choose Share → Add to Home Screen.
+Built from the kids game template. `CLAUDE.md` has the design rules and lessons.
 
 ## Develop
 
@@ -24,4 +18,7 @@ npm install
 npm run dev      # dev server reachable from a tablet on the same network
 npm run build    # production build into dist/
 npm run preview  # serve the built version
+python3 scripts/make_icons.py   # regenerate the app icons (needs Pillow)
 ```
+
+To install on iPad or iPhone, open the GitHub Pages link in Safari and choose Share → Add to Home Screen.

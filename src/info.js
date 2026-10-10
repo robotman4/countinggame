@@ -11,7 +11,7 @@ const VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
 
 // Change the first section per game. Keep the other two unless the game really does something different.
 const SECTIONS = [
-  ['My Game', 'A short description of the game: what the player does, and the age range (made for kids aged 4–8).'],
+  ['Count & Build', 'A building site game for kids aged 4–8. A sign shows what the house needs, for example 4 beams and 2 rocks. The child drives the truck to the right piles, counts the pieces into the truck and drives back to the site. It practises counting, matching and planning trips, with no reading needed.'],
   ['Your data', 'No ads, no accounts, no in-app purchases. Nothing is collected or sent anywhere. Progress is saved only on this device; deleting the app or clearing website data removes it. The game works offline once installed.'],
   ['Disclaimer', 'This game is provided "as is", free of charge and without warranty of any kind. You play on your own terms and at your own risk. The makers take no responsibility for any damage, loss or other consequences of using it. Adults are responsible for supervising children and their screen time.'],
 ];

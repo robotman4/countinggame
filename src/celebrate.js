@@ -1,9 +1,11 @@
 // "New version!" present on the title screen after an update.
 // The player taps the present (which also lets iOS start the sound), it bursts open with
-// confetti, fireworks and a fanfare, and a sparkling crown pops out of it.
-// In a real game, swap the crown for something from that game (Rocket Hunt shoots out a rocket).
+// confetti, fireworks and a fanfare, and a prize pops out of it.
+// Here a spinning, fully loaded dump truck pops out.
 import { V, R, ease, Tweens, TAU } from './core.js';
-import { INK, rr, fs, circle, drawHand, drawTreasure } from './draw.js';
+import { INK, rr, fs, circle, drawHand } from './draw.js';
+import { drawModelAt } from './iso.js';
+import { truck } from './models.js';
 import { Particles } from './particles.js';
 import { sfx } from './audio.js';
 
@@ -90,7 +92,7 @@ export class Gift {
     ctx.restore();
     ctx.restore();
     // The prize, in front of the box.
-    if (this.state === 'open') drawTreasure(ctx, 'crown', x, y - 80 + this.prize.y + Math.sin(t * 6) * 6, t, this.prize.s);
+    if (this.state === 'open') drawModelAt(ctx, (L, M) => truck(L, M, { load: ['beam', 'brick', 'rock', 'sand', 'log', 'pipe'], light: Math.sin(t * 10) > 0 }), x, y - 60 + this.prize.y + Math.sin(t * 6) * 6, this.prize.s * 0.9, t * 2);
     this.fx.draw(ctx);
     if (this.state === 'wait' && this.t > 2) drawHand(ctx, x + 40, y - 20, 1.1, Math.sin(t * 8) > 0 ? 1 : 0);
     ctx.restore();

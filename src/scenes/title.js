@@ -7,9 +7,11 @@ import { Particles } from '../particles.js';
 import { pwa } from '../pwa.js';
 import { InfoPanel } from '../info.js';
 import { Gift } from '../celebrate.js';
-import { PlayScene } from './play.js';
+import { LevelScene } from './levels.js';
+import { drawModelAt } from '../iso.js';
+import { truck, pile, tree } from '../models.js';
 
-export const GAME_TITLE = 'MY GAME';
+export const GAME_TITLE = 'COUNT & BUILD';
 
 export class TitleScene {
   constructor(game) {
@@ -40,7 +42,7 @@ export class TitleScene {
     if (this.updBtn.hit(p)) { tapUpdate(this.updBtn, this.fx); return; }
     if (this.infoBtn.hit(p)) { this.info.show(); return; }
     if (this.sound.hit(p)) { toggleMute(); sfx('tap'); return; }
-    if (this.play.hit(p)) { sfx('pop'); this.game.go(new PlayScene(this.game, 1)); return; }
+    if (this.play.hit(p)) { sfx('pop'); this.game.go(new LevelScene(this.game)); return; }
     // Tapping anywhere does something fun.
     this.fx.burst(p.x, p.y, 8);
     sfx('tap');
@@ -72,7 +74,14 @@ export class TitleScene {
     }
     ctx.restore();
     // sun
-    circle(ctx, V.w - 160, 140, 50); fs(ctx, '#ffe14d');
+    circle(ctx, V.safeL + 130, 330, 50); fs(ctx, '#ffe14d');
+    // blocky scenery: piles, trees and the truck driving back and forth
+    drawModelAt(ctx, (L, M) => tree(L, M, 1), V.w / 2 - 420, 650, 1.4);
+    drawModelAt(ctx, (L, M) => pile(L, M, 'sand'), V.w / 2 - 300, 680, 1.1);
+    drawModelAt(ctx, (L, M) => pile(L, M, 'beam'), V.w / 2 + 300, 680, 1.1);
+    drawModelAt(ctx, (L, M) => tree(L, M, 0), V.w / 2 + 430, 650, 1.4);
+    const k = (Math.sin(t * 0.6) + 1) / 2, dir = Math.cos(t * 0.6) > 0 ? 0 : Math.PI;
+    drawModelAt(ctx, (L, M) => truck(L, M, { load: ['beam', 'beam', 'rock', 'sand', 'brick', 'log'] }), V.w / 2 - 160 + k * 320, 690 + Math.abs(Math.sin(t * 20)) * 1.5, 1.3, dir);
     this.play.draw(ctx, t);
     this.updBtn.visible = pwa.ready || this.updBtn.spinning;
     this.updBtn.draw(ctx, t);

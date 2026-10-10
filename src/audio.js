@@ -173,6 +173,19 @@ const sfxDefs = {
     osc('p25', 300, t + 0.05, 0.2, 0.15, sfxBus, 200);
   },
   swat() { const t = ctx.currentTime; noise(t, 0.08, 0.6, sfxBus, 'highpass', 2000); osc('p25', 900, t, 0.25, 0.2, sfxBus, 2400); },
+  // Truck horn: two short low notes.
+  honk() {
+    const t = ctx.currentTime;
+    for (const d of [0, 0.16]) { osc('square', 330, t + d, 0.13, 0.18, sfxBus); osc('square', 415, t + d, 0.13, 0.12, sfxBus); }
+  },
+  vroom() { const t = ctx.currentTime; osc('sawtooth', 70, t, 0.4, 0.18, sfxBus, 150); noise(t, 0.3, 0.2, sfxBus, 'lowpass', 300, 600); },
+  // Counting: each number a step higher on the scale.
+  count(n = 1) {
+    const t = ctx.currentTime, step = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16][(n - 1) % 10];
+    osc('p25', mtof(72 + step), t, 0.16, 0.26, sfxBus);
+    osc('triangle', mtof(60 + step), t, 0.16, 0.3, sfxBus);
+  },
+  dump() { const t = ctx.currentTime; noise(t, 0.7, 0.5, sfxBus, 'lowpass', 700, 150); },
   beep() { const t = ctx.currentTime; osc('p25', 880, t, 0.18, 0.3, sfxBus); },
   beepHigh() { const t = ctx.currentTime; osc('p25', 1320, t, 0.4, 0.3, sfxBus); },
   star(i = 0) {
